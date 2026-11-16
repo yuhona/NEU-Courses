@@ -60,11 +60,11 @@ def get_sentence_vectorizer(sentences):
     ### START CODE HERE ###
 
     # Define TextVectorization object with the appropriate standardize parameter
-    sentence_vectorizer = None
+    sentence_vectorizer = tf.keras.layers.TextVectorization(standardize=None)
     # Adapt the sentence vectorization object to the given sentences
-    None.adapt(None)
+    sentence_vectorizer.adapt(sentences)
     # Get the vocabulary
-    vocab = None
+    vocab = sentence_vectorizer.get_vocabulary()
 
     ### END CODE HERE ###
 
@@ -87,22 +87,22 @@ def label_vectorizer(labels, tag_map):
     ### START CODE HERE ###
 
     # Each element in labels is a string of tags so for each of them:
-    for element in None:
+    for element in labels:
         # Split it into single tokens. You may use .split function for strings. Be aware to split it by a blank space!
-        tokens = element.split(None)
+        tokens = element.split(" ")
 
         # Use the dictionaty tag_map passed as an argument to the label_vectorizer function
         # to make the correspondence between tags and numbers.
-        element_ids = None
+        element_ids = []
 
         for token in tokens:
-            element_ids.append(None)
+            element_ids.append(tag_map[token])
 
         # Append the found ids to corresponding to the current element to label_ids list
-        label_ids.append(None)
+        label_ids.append(element_ids)
 
     # Pad the elements
-    label_ids = None
+    label_ids = tf.keras.utils.pad_sequences(label_ids, padding="post", value=-1)
 
     ### END CODE HERE ###
 
@@ -127,13 +127,17 @@ def NER(len_tags, vocab_size, embedding_dim = 50):
 
     model = tf.keras.Sequential(name = 'sequential')
     # Add the tf.keras.layers.Embedding layer. Do not forget to mask out the zeros!
-    model.add(None)
+    model.add(tf.keras.layers.Embedding(vocab_size + 1, embedding_dim, mask_zero=True))
     # Add the LSTM layer. Make sure you are passing the right dimension (defined in the docstring above)
     # and returning every output for the tf.keras.layers.LSTM layer and not the very last one.
-    model.add(None)
+    model.add(tf.keras.layers.LSTM(embedding_dim, return_sequences=True))
     # Add the final tf.keras.layers.Dense with the appropriate activation function. Remember you must pass the activation function itself ant not its call!
     # You must use tf.nn.log_softmax instead of tf.nn.log_softmax().
-    model.add(None)
+    model.add(tf.keras.layers.Dense(len_tags, activation=tf.nn.log_softmax))
+    # The loss and metric mask label padding explicitly. Drop the output mask
+    # so Keras does not apply per-token weights to the scalar accuracy.
+    model.add(tf.keras.layers.Reshape((-1, len_tags)))
+    model.build((None, None))
 
     ### END CODE HERE ###
 
@@ -156,7 +160,9 @@ def masked_loss(y_true, y_pred):
     ### START CODE HERE ###
 
     # Calculate the loss for each item in the batch. Remember to pass the right arguments, as discussed above!
-    loss = tf.keras.losses.SparseCategoricalCrossentropy 
+    loss = tf.keras.losses.sparse_categorical_crossentropy(
+        y_true, y_pred, from_logits=True, ignore_class=-1
+    )
 
     ### END CODE HERE ###
 
@@ -183,18 +189,20 @@ def masked_accuracy(y_true, y_pred):
     # You must always cast the tensors to the same type in order to use them in training. Since you will make divisions, it is safe to use tf.float32 data type.
     y_true = tf.cast(y_true, tf.float32) 
     # Create the mask, i.e., the values that will be ignored
-    mask = None
+    mask = tf.not_equal(y_true, -1)
     mask = tf.cast(mask, tf.float32) 
     # Perform argmax to get the predicted values
-    y_pred_class = None
+    y_pred_class = tf.argmax(y_pred, axis=-1)
     y_pred_class = tf.cast(y_pred_class, tf.float32) 
     # Compare the true values with the predicted ones
-    matches_true_pred  = tf.equal(None, None)
+    matches_true_pred  = tf.equal(y_true, y_pred_class)
     matches_true_pred = tf.cast(matches_true_pred , tf.float32) 
     # Multiply the acc tensor with the masks
-    matches_true_pred *= None
+    matches_true_pred *= mask
     # Compute masked accuracy (quotient between the total matches and the total valid values, i.e., the amount of non-masked values)
-    masked_acc = None/None
+    masked_acc = tf.math.divide_no_nan(
+        tf.reduce_sum(matches_true_pred), tf.reduce_sum(mask)
+    )
     
     ### END CODE HERE ### 
 
@@ -220,13 +228,13 @@ def predict(sentence, model, sentence_vectorizer, tag_map):
     ### START CODE HERE ### 
 
     # Convert the sentence into ids
-    sentence_vectorized = None
+    sentence_vectorized = sentence_vectorizer(sentence)
     # Expand its dimension to make it appropriate to pass to the model
-    sentence_vectorized = tf.expand_dims(None, None)
+    sentence_vectorized = tf.expand_dims(sentence_vectorized, axis=0)
     # Get the model output
-    output = None
+    output = model(sentence_vectorized, training=False)
     # Get the predicted labels for each token, using argmax function and specifying the correct axis to perform the argmax
-    outputs = np.argmax(None, axis = None)
+    outputs = np.argmax(output, axis=-1)
     # Next line is just to adjust outputs dimension. Since this function expects only one input to get a prediction, outputs will be something like [[1,2,3]]
     # so to avoid heavy notation below, let's transform it into [1,2,3]
     outputs = outputs[0] 
@@ -234,9 +242,9 @@ def predict(sentence, model, sentence_vectorizer, tag_map):
     labels = list(tag_map.keys()) 
     pred = [] 
     # Iterating over every predicted token in outputs list
-    for tag_idx in None:
-        pred_label = None
-        pred.append(None)
+    for tag_idx in outputs:
+        pred_label = labels[tag_idx]
+        pred.append(pred_label)
     
     ### END CODE HERE ### 
     
@@ -317,5 +325,3 @@ if __name__ == '__main__':
     else:
         print("Please provide two arguments.")
         main(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6])
-
-
